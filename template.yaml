@@ -1,0 +1,134 @@
+---
+
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+
+Description: "Sample of leveraging Lambda@Edge to block incoming requests"
+
+Parameters:
+  OverLimitCookieName:
+    Type: String
+    Default: SESSION_OVER_LIMIT
+    Description: Name of cookie to indicate client is over limit
+
+  OverLimitThreshold:
+    Type: String
+    Default: '10'
+    Description: Requests per second threshold before block is initiated
+
+  OverLimitTimeoutInSeconds:
+    Type: String
+    Default: '300'
+    Description: Timeout for over limit blocking (in seconds)
+
+  SessionIdCookieName:
+    Type: String
+    Default: SESSION_ID
+    Description: Name of the cookie that contains the session identifier
+
+Resources:
+  #
+  # ---------- Over Limit Function (viewer-reqest) ----------
+  #
+  OverLimitCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: viewer-request/
+      Handler: index.handler
+      Runtime: nodejs6.10
+      Role: !GetAtt EdgeBlockingFunctionRole.Arn
+      Timeout: 1
+      Environment:
+        Variables:
+          OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
+
+  #
+  # ---------- Monitor Limit Function (origin-request) ----------
+  #
+  MonitorLimitFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: origin-request/
+      Handler: index.handler
+      Runtime: nodejs6.10
+      Role: !GetAtt EdgeBlockingFunctionRole.Arn
+      Timeout: 3
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref BlockingDDBTable
+          OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
+          OVER_LIMIT_THRESHOLD: !Ref OverLimitThreshold
+          OVER_LIMIT_TIMEOUT: !Ref OverLimitTimeoutInSeconds
+          SESSION_ID_COOKIE_NAME: !Ref SessionIdCookieName
+
+  #
+  # ---------- DynamoDB Table ----------
+  # Table will contain:
+  #  - hashKey: sessionId value + uri
+  #  - timestamp: last time seen
+  #  - sessionId: session id value (from cookie)
+  #  - uri: uri in question
+  #  - count: default to 1
+  #
+  BlockingDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: 'edge-blocking'
+      AttributeDefinitions:
+        -
+          AttributeName: clientKey
+          AttributeType: S
+        -
+          AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        -
+          AttributeName: clientKey
+          KeyType: HASH
+        -
+          AttributeName: timestamp
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  #
+  # ---------- IAM ----------
+  #
+  EdgeBlockingFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: '/EdgeBlocking/'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: AllowLambdaServiceToAssumeRole
+            Effect: Allow
+            Action: 
+              - sts:AssumeRole
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+
+  EdgeBlockingDBPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: EdgeBlockingFunctionRole
+    Properties:
+      PolicyName: EdgeBlockingDBPolicy
+      Roles:
+        - !Ref EdgeBlockingFunctionRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: Allow
+            Resource: !GetAtt BlockingDDBTable.Arn
+            Action:
+              - "dynamodb:Query"
+              - "dynamodb:GetItem"
+              - "dynamodb:UpdateItem"
+              - "dynamodb:PutItem"
+              - "dynamodb:DeleteItem"

@@ -1,0 +1,34 @@
+{
+  "Records": [
+    {
+      "cf": {
+        "request": {
+          "headers": {
+            "host": [
+              {
+                "value": "d123.cf.net",
+                "key": "Host"
+              }
+            ],
+            "user-agent": [
+              {
+                "value": "test-agent",
+                "key": "User-Agent"
+              }
+            ],
+            "cookie": [
+              "SESSION_ID=173A002C-8B03-45A9-A280-7A9903AD5E82; secure; path=/;",
+              "ANOTHER_COOKIE=hello_world"
+            ]
+          },
+          "clientIp": "2001:cdba::3257:9652",
+          "uri": "/experiment-pixel.jpg",
+          "method": "GET"
+        },
+        "config": {
+          "distributionId": "EXAMPLE"
+        }
+      }
+    }
+  ]
+}

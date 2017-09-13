@@ -1,0 +1,4 @@
+.DS_Store
+packaged.yaml
+node_modules
+deploy.sh
