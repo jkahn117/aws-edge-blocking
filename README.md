@@ -67,7 +67,7 @@ The monitoring algorithm requires further evolution, intention here was to provi
 
 ## License
 
-This project is licensed under the Apache 2.0 License, see [License.md](License.md) for details
+This project is licensed under the Apache 2.0 License, see [LICENSE](LICENSE) for details
 
 ## Author
 
