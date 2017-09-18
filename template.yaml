@@ -112,6 +112,7 @@ Resources:
             Principal:
               Service: 
                 - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
 
   EdgeBlockingDBPolicy:
     Type: AWS::IAM::Policy
