@@ -17,8 +17,14 @@
               }
             ],
             "cookie": [
-              "SESSION_ID=173A002C-8B03-45A9-A280-7A9903AD5E82; secure; path=/;",
-              "ANOTHER_COOKIE=hello_world"
+              {
+                "value": "SESSION_ID=173A002C-8B03-45A9-A280-7A9903AD5E82; secure; path=/;",
+                "key": "Cookie"
+              },
+              {
+                "value": "ANOTHER_COOKIE=hello_world",
+                "key": "Cookie"
+              }
             ]
           },
           "clientIp": "2001:cdba::3257:9652",

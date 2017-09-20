@@ -28,7 +28,9 @@ function rateLimit () {
     status: '429',
     statusDescription: STATUS_CODES['429'],
     headers: {
-      'Set-Cookie': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
+      'set-cookie': {
+        'key': 'Set-Cookie',
+        'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
     }
   }
 }
@@ -48,8 +50,8 @@ function sessionIdFromCookie (request) {
 
   if (request.headers.cookie) {
     request.headers.cookie.forEach((cookie) => {
-      if (cookie.indexOf(SESSION_ID_COOKIE_NAME) >= 0) {
-        let m = cookie.match(cookieParser)
+      if (cookie.value.indexOf(SESSION_ID_COOKIE_NAME) >= 0) {
+        let m = cookie.value.match(cookieParser)
         return sessionId = m[1]
       }
     })
@@ -178,26 +180,6 @@ function getLastRecordFor (key) {
 }
 
 /**
- * Appends a header to the returned request ('x-edge-blocking-result') with
- * provided message.
- * @param  {[type]} request request object
- * @param  {[type]} message message for result
- * @return {[type]}         updated request
- */
-function appendResultHeaderTo (request, message) {
-  if (!request) {
-    return
-  }
-
-  if (!request.headers['x-edge-blocking']) {
-    request.headers['x-edge-blocking'] = []
-  }
-
-  request.headers['x-edge-blocking'].push(`origin-request=${message}`)
-  return request
-}
-
-/**
  * Capture SESSION_ID from cookie and URI. Query DynamoDB table (“requests”)
  * for record with primary key value of “SESSION_ID+URI”:
  * 
@@ -226,7 +208,6 @@ exports.handler = (event, context, callback) => {
 
   // if there is no session id, just return request and move on...
   if (!key) {
-    request = appendResultHeaderTo(request, 'No session id in request')
     callback(null, request)
   }
   
@@ -234,10 +215,8 @@ exports.handler = (event, context, callback) => {
     .then((record) => {
       if (record) {
         console.log(`** ${util.inspect(record, { depth: 5 })} **`)
-        request = appendResultHeaderTo(request, 'Examined record for this client, proceeding')
         return examineRecord(key, record)  
       } else {
-        request = appendResultHeaderTo(request, 'Created new record for this client')
         return createRecordFor(key, request)
       }
     })
