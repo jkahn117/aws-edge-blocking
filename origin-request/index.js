@@ -189,7 +189,11 @@ function appendResultHeaderTo (request, message) {
     return
   }
 
-  request.headers['x-edge-blocking-origin-request-result'] = message
+  if (!request.headers['x-edge-blocking']) {
+    request.headers['x-edge-blocking'] = []
+  }
+
+  request.headers['x-edge-blocking'].push(`origin-request=${message}`)
   return request
 }
 

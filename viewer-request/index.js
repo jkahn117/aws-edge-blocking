@@ -20,7 +20,7 @@ function rateLimit () {
 }
 
 /**
- * Appends a header to the returned request ('x-edge-blocking-result') with
+ * Appends a header to the returned request ('x-edge-blocking') with
  * provided message.
  * @param  {[type]} request request object
  * @param  {[type]} message message for result
@@ -31,7 +31,11 @@ function appendResultHeaderTo (request, message) {
     return
   }
 
-  request.headers['x-edge-blocking-viewer-request-result'] = message
+  if (!request.headers['x-edge-blocking']) {
+    request.headers['x-edge-blocking'] = []
+  }
+
+  request.headers['x-edge-blocking'].push(`viewer-request=${message}`)
   return request
 }
 
