@@ -5,7 +5,6 @@ const util = require('util')
 const { STATUS_CODES } = require('http')
 
 // Environment Variables
-const TABLE_NAME = process.env.TABLE_NAME
 const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
 
 /**
@@ -21,6 +20,22 @@ function rateLimit () {
 }
 
 /**
+ * Appends a header to the returned request ('x-edge-blocking-result') with
+ * provided message.
+ * @param  {[type]} request request object
+ * @param  {[type]} message message for result
+ * @return {[type]}         updated request
+ */
+function appendResultHeaderTo (request, message) {
+  if (!request) {
+    return
+  }
+
+  request.headers['x-edge-blocking-viewer-request-result'] = message
+  return request
+}
+
+/**
  * Check for existence of cookie (e.g. SESSION_OVER_LIMIT) and reject
  * requests (return 429 response code) from clients on which the value is set
  * to true.
@@ -32,7 +47,7 @@ function rateLimit () {
 exports.handler = (event, context, callback) => {
   // console.log(util.inspect(event, { depth: 5 }))
   
-  const request = event.Records[0].cf.request
+  let request = event.Records[0].cf.request
   if (request.headers.cookie) {
     request.headers.cookie.some((cookie) => {
       if (cookie.indexOf(OVER_LIMIT_COOKIE_NAME) >= 0) {
@@ -40,6 +55,8 @@ exports.handler = (event, context, callback) => {
         return true
       }
     })
+  } else {
+    request = appendResultHeaderTo(request, 'No over limit cookie present, proceeding')
   }
 
   callback(null, request)

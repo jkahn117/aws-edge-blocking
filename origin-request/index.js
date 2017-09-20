@@ -178,6 +178,22 @@ function getLastRecordFor (key) {
 }
 
 /**
+ * Appends a header to the returned request ('x-edge-blocking-result') with
+ * provided message.
+ * @param  {[type]} request request object
+ * @param  {[type]} message message for result
+ * @return {[type]}         updated request
+ */
+function appendResultHeaderTo (request, message) {
+  if (!request) {
+    return
+  }
+
+  request.headers['x-edge-blocking-origin-request-result'] = message
+  return request
+}
+
+/**
  * Capture SESSION_ID from cookie and URI. Query DynamoDB table (“requests”)
  * for record with primary key value of “SESSION_ID+URI”:
  * 
@@ -201,15 +217,23 @@ function getLastRecordFor (key) {
 exports.handler = (event, context, callback) => {
   // console.log(util.inspect(event, { depth: 5 }))
 
-  const request = event.Records[0].cf.request
+  let request = event.Records[0].cf.request
   const key = clientKeyFor(request)
+
+  // if there is no session id, just return request and move on...
+  if (!key) {
+    request = appendResultHeaderTo(request, 'No session id in request')
+    callback(null, request)
+  }
   
   getLastRecordFor(key)
     .then((record) => {
       if (record) {
         console.log(`** ${util.inspect(record, { depth: 5 })} **`)
+        request = appendResultHeaderTo(request, 'Examined record for this client, proceeding')
         return examineRecord(key, record)  
       } else {
+        request = appendResultHeaderTo(request, 'Created new record for this client')
         return createRecordFor(key, request)
       }
     })
