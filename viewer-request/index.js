@@ -21,7 +21,7 @@ function rateLimit () {
 }
 
 ///
-const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);`)
+const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);?`)
 
 /**
  * Check for existence of cookie (e.g. SESSION_OVER_LIMIT) and reject
@@ -44,10 +44,12 @@ exports.handler = (event, context, callback) => {
       } else if (cookie.value.indexOf(SESSION_ID_COOKIE_NAME) >= 0) {
         let m = cookie.value.match(cookieParser)
 
-        request.headers['session-id'] = [{
-          key:   'session-id',
-          value: m[1]
-        }]
+        if (m) {
+          request.headers['session-id'] = [{
+            key:   'session-id',
+            value: m[1]
+          }]
+        }
       }
     })
   }
