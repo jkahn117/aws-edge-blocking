@@ -4,6 +4,12 @@
       "cf": {
         "request": {
           "headers": {
+            "session-id": [
+                {
+                    "value": "173A002C-8B03-45A9-A280-7A9903AD5E82",
+                    "key": "session-id"
+                }
+            ],
             "host": [
               {
                 "value": "d123.cf.net",
@@ -14,16 +20,6 @@
               {
                 "value": "test-agent",
                 "key": "User-Agent"
-              }
-            ],
-            "cookie": [
-              {
-                "value": "SESSION_ID=173A002C-8B03-45A9-A280-7A9903AD5E82; secure; path=/;",
-                "key": "Cookie"
-              },
-              {
-                "value": "ANOTHER_COOKIE=hello_world",
-                "key": "Cookie"
               }
             ]
           },

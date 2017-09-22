@@ -31,13 +31,14 @@ function rateLimit () {
       'set-cookie': {
         'key': 'Set-Cookie',
         'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
+      }
     }
   }
 }
 
 
 ///
-const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);`)
+// const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);`)
 
 /**
  * Retrieves the session id (as identified by SESSION_ID_COOKIE_NAME)
@@ -45,16 +46,11 @@ const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);`)
  * @param  {[type]} request incoming http request
  * @return {[type]}         session id or null if not found
  */
-function sessionIdFromCookie (request) {
+function sessionIdFrom (request) {
   let sessionId = null
-
-  if (request.headers.cookie) {
-    request.headers.cookie.forEach((cookie) => {
-      if (cookie.value.indexOf(SESSION_ID_COOKIE_NAME) >= 0) {
-        let m = cookie.value.match(cookieParser)
-        return sessionId = m[1]
-      }
-    })
+  
+  if (request.headers['session-id'] && request.headers['session-id'].length > 0) {
+    sessionId = request.headers['session-id'][0].value
   }
 
   return sessionId
@@ -66,7 +62,8 @@ function sessionIdFromCookie (request) {
  * @return {[type]}         client key
  */
 function clientKeyFor (request) {
-  let sessionId = sessionIdFromCookie(request)
+  let sessionId = sessionIdFrom(request)
+  console.log(sessionId)
 
   if (sessionId) {
     return `${sessionId}++${request.uri}`
@@ -89,7 +86,7 @@ function createRecordFor (key, request) {
       timestamp: Date.now(),
       lastTimestamp: Date.now(),
       count: 1,
-      sessionId: sessionIdFromCookie(request),
+      sessionId: sessionIdFrom(request),
       uri: request.uri
     }
   }
@@ -201,7 +198,7 @@ function getLastRecordFor (key) {
  * @param  callback
  */
 exports.handler = (event, context, callback) => {
-  // console.log(util.inspect(event, { depth: 5 }))
+  console.log(util.inspect(event, { depth: 10 }))
 
   let request = event.Records[0].cf.request
   const key = clientKeyFor(request)
@@ -214,7 +211,7 @@ exports.handler = (event, context, callback) => {
   getLastRecordFor(key)
     .then((record) => {
       if (record) {
-        console.log(`** ${util.inspect(record, { depth: 5 })} **`)
+        console.log(`** ${util.inspect(record, { depth: 10 })} **`)
         return examineRecord(key, record)  
       } else {
         return createRecordFor(key, request)
