@@ -5,7 +5,6 @@ const AWS = require('aws-sdk')
 const util = require('util')
 const { STATUS_CODES } = require('http')
 
-AWS.config.update({ region: 'us-east-1' })
 const ddb = new AWS.DynamoDB.DocumentClient()
 
 /// Environment Variables
@@ -29,14 +28,17 @@ function rateLimit () {
     status: '429',
     statusDescription: STATUS_CODES['429'],
     headers: {
-      'set-cookie': [{
+      'set-cookie': {
         'key': 'Set-Cookie',
         'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
-      }]
-    },
-    body: ''
+      }
+    }
   }
 }
+
+
+///
+// const cookieParser = new RegExp(`${SESSION_ID_COOKIE_NAME}=([^\\s;]*);`)
 
 /**
  * Retrieves the session id (as identified by SESSION_ID_COOKIE_NAME)
