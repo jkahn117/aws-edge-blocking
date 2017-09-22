@@ -45,6 +45,10 @@ AWS resources are managed by the [Serverless Application Model](https://github.c
     $ aws cloudformation deploy --template-file packaged.yaml --stack-name aws-edge-blocking-sample --capabilities CAPABILITY_IAM
     ```
 
+### CloudFront
+
+In order to ensure all requests are passed to the origin, such that we can monitor using the origin-request event, be sure to set all TTLs (minimum, maximum, and desired) for the Behavior to 0. Ideally, this is only done on a small number of behaviors.
+
 ## Configuring Lambda@Edge Triggers
 
 As mentioned above, before these functions can be used with Lambda@Edge, you will need to remove use of Lambda Environment Variables by modifying the source code. I have included here to demonstrate that these can be changed and for ease of testing outside of the Edge environment.
