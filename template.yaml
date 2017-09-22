@@ -55,6 +55,7 @@ Resources:
       Timeout: 3
       Environment:
         Variables:
+          TABLE_REGION: !Sub "${AWS::Region}"
           TABLE_NAME: !Ref BlockingDDBTable
           OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
           OVER_LIMIT_THRESHOLD: !Ref OverLimitThreshold

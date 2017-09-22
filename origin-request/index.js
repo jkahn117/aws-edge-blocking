@@ -5,7 +5,7 @@ const AWS = require('aws-sdk')
 const util = require('util')
 const { STATUS_CODES } = require('http')
 
-AWS.config.update({ region: 'us-east-1' })
+AWS.config.update({ region: process.env.TABLE_REGION })
 const ddb = new AWS.DynamoDB.DocumentClient()
 
 /// Environment Variables
