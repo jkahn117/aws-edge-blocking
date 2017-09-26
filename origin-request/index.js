@@ -29,7 +29,10 @@ function rateLimit () {
     status: '429',
     statusDescription: STATUS_CODES['429'],
     headers: {
-      'Set-Cookie': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
+      'set-cookie': [{
+        'key': 'Set-Cookie',
+        'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
+      }]
     },
     body: ''
   }
