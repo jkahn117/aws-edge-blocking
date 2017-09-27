@@ -16,15 +16,20 @@ Parameters:
     Default: '10'
     Description: Requests per second threshold before block is initiated
 
-  OverLimitTimeoutInSeconds:
+  MaximumRequestsPerMinute:
     Type: String
-    Default: '300'
-    Description: Timeout for over limit blocking (in seconds)
+    Default: '10'
+    Description: Maximum number of requests allowed by service per minute
 
-  SessionIdCookieName:
+  RefillPeriodInSeconds:
     Type: String
-    Default: SESSION_ID
-    Description: Name of the cookie that contains the session identifier
+    Default: '60'
+    Description: Amount of time (in seconds) between refills of additional requests
+
+  RefillAmountByPeriod:
+    Type: String
+    Default: '1'
+    Description: Amount of refill per each period defined by RefillPeriodInSeconds
 
 Resources:
   #
@@ -58,9 +63,10 @@ Resources:
           TABLE_REGION: !Sub "${AWS::Region}"
           TABLE_NAME: !Ref BlockingDDBTable
           OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
-          OVER_LIMIT_THRESHOLD: !Ref OverLimitThreshold
-          OVER_LIMIT_TIMEOUT: !Ref OverLimitTimeoutInSeconds
           SESSION_ID_COOKIE_NAME: !Ref SessionIdCookieName
+          MAX_REQUESTS_PER_MINUTE: !Ref MaximumRequestsPerMinute
+          REFILL_PERIOD_IN_SECONDS: !Ref RefillPeriodInSeconds
+          REFILL_AMOUNT: !Ref RefillAmountByPeriod
 
   #
   # ---------- DynamoDB Table ----------
@@ -79,19 +85,16 @@ Resources:
         -
           AttributeName: clientKey
           AttributeType: S
-        -
-          AttributeName: timestamp
-          AttributeType: N
       KeySchema:
         -
           AttributeName: clientKey
           KeyType: HASH
-        -
-          AttributeName: timestamp
-          KeyType: RANGE
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
 
   #
   # ---------- IAM ----------
