@@ -1,42 +1,53 @@
 
 ///////// SAMPLE CODE ONLY /////////
 
-const AWS = require('aws-sdk')
-const util = require('util')
-const { STATUS_CODES } = require('http')
+'use strict'
 
-AWS.config.update({ region: process.env.TABLE_REGION })
+//---- ENVIRONMENT VARIABLES ----//
+
+/// AWS Region in which supporting DynamoDB table exists (e.g. us-east-1, us-west-2)
+const TABLE_REGION = (process.env.AWS_SAM_LOCAL) ? 'us-east-1' : process.env.TABLE_REGION
+/// Name of the DynamoDB table
+const TABLE_NAME = (process.env.AWS_SAM_LOCAL) ? 'edge-blocking' : process.env.TABLE_NAME
+/// Name of the cookie that identifies the session ID
+const SESSION_ID_COOKIE_NAME = process.env.SESSION_ID_COOKIE_NAME
+/// Name of the cookie that indicates a client is over rate limit
+const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
+/// Maximum number of requests allows per minute
+const MAX_REQUESTS_PER_MINUTE = Number(process.env.MAX_REQUESTS_PER_MINUTE)
+/// Time (in milliseconds) before refill of tokens in bucket
+const REFILL_TIME = Number(process.env.REFILL_PERIOD_IN_SECONDS) * 1000
+/// Amount of refill per period defined by REFILL_TIME
+const REFILL_AMOUNT = Number(process.env.REFILL_AMOUNT)
+
+//---- DEPENDENCIES ----//
+
+// const util = require('util')
+const AWS = require('aws-sdk')
+AWS.config.update({ region: TABLE_REGION })
 const ddb = new AWS.DynamoDB.DocumentClient()
 
-/// Environment Variables
-const TABLE_NAME = (process.env.AWS_SAM_LOCAL) ? 'edge-blocking' : process.env.TABLE_NAME
-const SESSION_ID_COOKIE_NAME = process.env.SESSION_ID_COOKIE_NAME
-const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
-const OVER_LIMIT_THRESHOLD = Number(process.env.OVER_LIMIT_THRESHOLD)
-const OVER_LIMIT_TIMEOUT = Number(process.env.OVER_LIMIT_TIMEOUT)
+//---- UTILITY ----//
 
-///
 function OverLimitError() {}
 OverLimitError.prototype = Object.create(Error.prototype)
 OverLimitError.constructor = OverLimitError
 
-/**
- * Returns a response of "Too Many Requests"
- * @return {[type]}    429 response
- */
-function rateLimit () {
-  return {
-    status: '429',
-    statusDescription: STATUS_CODES['429'],
-    headers: {
-      'set-cookie': [{
-        'key': 'Set-Cookie',
-        'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${OVER_LIMIT_THRESHOLD * 60 * 60}`
-      }]
-    },
-    body: ''
-  }
+/// Response to indicate over limit
+const rateLimitResponse = {
+  status: '429',
+  statusDescription: 'Too Many Requests',
+  headers: {
+    'set-cookie': [{
+      'key': 'Set-Cookie',
+      'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${REFILL_TIME/1000}`
+    }]
+  },
+  body: ''
 }
+
+
+//---- FUNCTIONS ----//
 
 /**
  * Retrieves the session id (as identified by SESSION_ID_COOKIE_NAME)
@@ -61,7 +72,6 @@ function sessionIdFrom (request) {
  */
 function clientKeyFor (request) {
   let sessionId = sessionIdFrom(request)
-  console.log(sessionId)
 
   if (sessionId) {
     return `${sessionId}++${request.uri}`
@@ -71,21 +81,29 @@ function clientKeyFor (request) {
 }
 
 /**
- * Creates a new record in DynamoDB table for the passed key and record.
- * @param  {[type]} key     unique identified for client + uri
- * @param  {[type]} request http request
- * @return {[type]}         Promise
+ * Calculates the number of periods since last bucket update.
+ * @param  {[type]} bucket bucket under operation
+ * @return {[type]}        number of periods (int)
  */
-function createRecordFor (key, request) {
+function _refillCount (bucket) {
+  let timeSince = Date.now() - bucket.lastUpdate
+  console.log(`Time since last request: ${Math.floor(timeSince / 1000)} seconds`)
+  return Math.floor(timeSince / REFILL_TIME)
+}
+
+/**
+ * Update the bucket record in DynamoDB with passed data.
+ * @param  {[type]} bucket new bucket record data
+ * @return {[type]}        Promise of DDB put action
+ */
+function _updateBucket (bucket) {
   let params = {
     TableName: TABLE_NAME,
     Item: {
-      clientKey: key,
-      timestamp: Date.now(),
-      lastTimestamp: Date.now(),
-      count: 1,
-      sessionId: sessionIdFrom(request),
-      uri: request.uri
+      clientKey: bucket.clientKey,
+      value: bucket.value,
+      lastUpdate: bucket.lastUpdate,
+      expiresAt: bucket.lastUpdate + (60 * 60 * 24 * 1000) // in 24 hours
     }
   }
 
@@ -93,110 +111,83 @@ function createRecordFor (key, request) {
 }
 
 /**
- * Deletes the item of the passed record in DynamoDB.
- * @param  {[type]} record record to be deleted
- * @return {[type]}        Promise
+ * Decrements the number of tokens in the passed bucket by the number of
+ * tokens passed as a parameter. Updates the bucket's record in DynamoDB.
+ * @param  {[type]} bucket bucket under operation
+ * @param  {[type]} tokens number of tokens to decrement
+ * @return {[type]}        Promise of result
  */
-function deleteRecord (record) {
-  let params = {
-    TableName: TABLE_NAME,
-    Key: { clientKey: record.clientKey, timestamp: record.timestamp },
+function reduce (bucket, tokens) {
+  let refillCount = _refillCount(bucket)
+  bucket.value += refillCount * REFILL_AMOUNT
+  bucket.lastUpdate += refillCount * REFILL_TIME
+
+  console.log(`Adding ${refillCount * REFILL_AMOUNT} tokens to the bucket`)
+
+  if (bucket.value >= MAX_REQUESTS_PER_MINUTE) {
+    // reset the bucket
+    bucket.value = MAX_REQUESTS_PER_MINUTE
+    bucket.lastUpdate = Date.now()
   }
-
-  return ddb.delete(params).promise()
-}
-
-/**
- * Increments the count of the passed record in DynamoDB.
- * @param  {[type]} record record to be incremented
- * @return {[type]}        Promise
- */
-function incrementCountFor (record) {
-  let params = {
-    TableName: TABLE_NAME,
-    Key: { clientKey: record.clientKey, timestamp: record.timestamp },
-    UpdateExpression: 'set #count = :c, #lt = :t',
-    ExpressionAttributeNames: { '#count': 'count', '#lt': 'lastTimestamp' },
-    ExpressionAttributeValues: { ':c': record.count + 1, ':t': Date.now() }
-  }
-
-  return ddb.update(params).promise()
-}
-
-/**
- * Interrogates the record retrieved from DynamoDB and determines if
- * the current request is over the defined time or count thresholds.
- *
- * TODO: currently works on a fixed window from when the record was
- * created, but could be made to slide window
- * 
- * @param  {[type]} key    identifier for the client + uri
- * @param  {[type]} record last record for client
- * @return {[type]}        Promise
- */
-function examineRecord (key, record) {
-  let now = Date.now()
-  let secondsSinceLastRecord = (now - record.lastTimestamp) / 1000
-  let secondsSinceRecord = (now - record.timestamp) / 1000
-  let requestsInTimePeriod = (record.count + 1) / secondsSinceRecord
-
-  if (secondsSinceLastRecord > OVER_LIMIT_TIMEOUT) {
-    console.log('Deleting record')
-    return deleteRecord(record)
-  } else if (requestsInTimePeriod >= OVER_LIMIT_THRESHOLD) {
-    console.log('Over threshold')
-    return incrementCountFor(record).then(() => {
+  if (tokens > bucket.value) {
+    console.log('Not enough tokens remaining in bucket for this request!!')
+    return _updateBucket(bucket).then(() => {
       throw new OverLimitError()
     })
-  } else {
-    console.log('Incrementing record')
-    return incrementCountFor(record)
   }
+
+  console.log(`Deducting ${tokens} tokens from the bucket - ${bucket.value-1} tokens remaining`)
+  bucket.value -= tokens
+  return _updateBucket(bucket)
 }
 
 /**
- * Retrieves the last record from DynamoDB for the client id + uri
- * @param  {[type]} key identifier client id + uri
- * @return {[type]}     Promise (result is record)
+ * Loads the bucket indicated by the passed key from DynamoDB or creates
+ * a new bucket for use.
+ * @param  {[type]} key identified for the client
+ * @return {[type]}     Promise of result
  */
-function getLastRecordFor (key) {
+function loadBucket (key) {
   let params = {
     TableName: TABLE_NAME,
-    KeyConditionExpression: 'clientKey = :key',
-    ExpressionAttributeValues: {
-      ':key': key
-    }
+    Key: { clientKey: key }
   }
 
-  return ddb.query(params).promise()
+  return ddb.get(params).promise()
     .then((data) => {
-      return data.Count > 0 ? data.Items[data.Count - 1] : null
+      if (data.Item) return data.Item
+
+      return {
+        clientKey: key,
+        value: MAX_REQUESTS_PER_MINUTE,
+        lastUpdate: Date.now()
+      }
     })
 }
 
 /**
- * Capture SESSION_ID from cookie and URI. Query DynamoDB table (“requests”)
- * for record with primary key value of “SESSION_ID+URI”:
- * 
- * If record exists:
- *   Compare timestamp — if difference is greater than X minutes (set threshold as desired):
- *     Remove record from table
- *     Unset cookie SESSION_OVER_LIMIT (remove cookie or set to false)
- * Else:
- *   Increment count field
- *   If count > threshold (set as desired):
- *     Set cookie SESSION_OVER_LIMIT in response with expiration of X minutes
- *     Reject / redirect request
+ * Main handler. Acts as a rate limiter for a given client identified by a
+ * unique session id contained in a cookie (available in header of event).
+ * Rate limiting is based on a token bucket model that starts full and then
+ * is decremented on each call from the client. The bucket begins to fill
+ * again with new tokens being added to the bucket in configured increments
+ * per configured time period.
  *
- * If record does NOT exist:
- *   Create new record, including timestamp and count of 1
+ * For example, the bucket may start with 10 tokens. Each request will decrement
+ * 1 token from the bucket. Once empty, a rate limit response (429 HTTP code)
+ * is returned. If we refill the bucket with 1 token every 60 seconds (or 1 
+ * minute), the bucket will refill when the client is not active.
+ *
+ * For higher thresholds, we can modify the configuration to enlarge the initial
+ * bucket (i.e. the number of requests we are willing to tolerate before blocking),
+ * decrease the refill period or the number of tokens per period.
  * 
  * @param  event
  * @param  context
  * @param  callback
  */
 exports.handler = (event, context, callback) => {
-  console.log(util.inspect(event, { depth: 10 }))
+  // console.log(util.inspect(event, { depth: 10 }))
 
   let request = event.Records[0].cf.request
   const key = clientKeyFor(request)
@@ -206,19 +197,14 @@ exports.handler = (event, context, callback) => {
     callback(null, request)
   }
   
-  getLastRecordFor(key)
-    .then((record) => {
-      if (record) {
-        console.log(`** ${util.inspect(record, { depth: 10 })} **`)
-        return examineRecord(key, record)  
-      } else {
-        return createRecordFor(key, request)
-      }
+  loadBucket(key)
+    .then((bucket) => {
+      return reduce(bucket, 1)
     })
     .then(() => callback(null, request))
     .catch((error) => {
       if (error instanceof OverLimitError) {
-        callback(null, rateLimit())
+        callback(null, rateLimitResponse)
       } else {
         callback(error)
       }
