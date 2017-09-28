@@ -16,7 +16,7 @@ Parameters:
     Default: '10'
     Description: Requests per second threshold before block is initiated
 
-  MaximumRequestsPerMinute:
+  MaximumRequestsPerPeriod:
     Type: String
     Default: '10'
     Description: Maximum number of requests allowed by service per minute
@@ -64,9 +64,9 @@ Resources:
           TABLE_NAME: !Ref BlockingDDBTable
           OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
           SESSION_ID_COOKIE_NAME: !Ref SessionIdCookieName
-          MAX_REQUESTS_PER_MINUTE: !Ref MaximumRequestsPerMinute
+          MAX_REQUESTS_PER_PERIOD: !Ref MaximumRequestsPerPeriod
           REFILL_PERIOD_IN_SECONDS: !Ref RefillPeriodInSeconds
-          REFILL_AMOUNT: !Ref RefillAmountByPeriod
+          REFILL_AMOUNT_PER_PERIOD: !Ref RefillAmountByPeriod
 
   #
   # ---------- DynamoDB Table ----------

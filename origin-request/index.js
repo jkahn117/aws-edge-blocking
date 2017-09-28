@@ -14,11 +14,11 @@ const SESSION_ID_COOKIE_NAME = process.env.SESSION_ID_COOKIE_NAME
 /// Name of the cookie that indicates a client is over rate limit
 const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
 /// Maximum number of requests allows per minute
-const MAX_REQUESTS_PER_MINUTE = Number(process.env.MAX_REQUESTS_PER_MINUTE)
+const MAX_REQUESTS_PER_PERIOD = Number(process.env.MAX_REQUESTS_PER_PERIOD)
 /// Time (in milliseconds) before refill of tokens in bucket
-const REFILL_TIME = Number(process.env.REFILL_PERIOD_IN_SECONDS) * 1000
-/// Amount of refill per period defined by REFILL_TIME
-const REFILL_AMOUNT = Number(process.env.REFILL_AMOUNT)
+const REFILL_PERIOD_IN_SECONDS = Number(process.env.REFILL_PERIOD_IN_SECONDS) * 1000
+/// Amount of refill per period defined by REFILL_PERIOD_IN_SECONDS
+const REFILL_AMOUNT_PER_PERIOD = Number(process.env.REFILL_AMOUNT_PER_PERIOD)
 
 //---- DEPENDENCIES ----//
 
@@ -40,7 +40,7 @@ const rateLimitResponse = {
   headers: {
     'set-cookie': [{
       'key': 'Set-Cookie',
-      'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${REFILL_TIME/1000}`
+      'value': `${OVER_LIMIT_COOKIE_NAME}=true; secure; path=/; max-age=${REFILL_PERIOD_IN_SECONDS/1000}`
     }]
   },
   body: ''
@@ -88,7 +88,7 @@ function clientKeyFor (request) {
 function _refillCount (bucket) {
   let timeSince = Date.now() - bucket.lastUpdate
   console.log(`Time since last request: ${Math.floor(timeSince / 1000)} seconds`)
-  return Math.floor(timeSince / REFILL_TIME)
+  return Math.floor(timeSince / REFILL_PERIOD_IN_SECONDS)
 }
 
 /**
@@ -119,14 +119,14 @@ function _updateBucket (bucket) {
  */
 function reduce (bucket, tokens) {
   let refillCount = _refillCount(bucket)
-  bucket.value += refillCount * REFILL_AMOUNT
-  bucket.lastUpdate += refillCount * REFILL_TIME
+  bucket.value += refillCount * REFILL_AMOUNT_PER_PERIOD
+  bucket.lastUpdate += refillCount * REFILL_PERIOD_IN_SECONDS
 
-  console.log(`Adding ${refillCount * REFILL_AMOUNT} tokens to the bucket`)
+  console.log(`Adding ${refillCount * REFILL_AMOUNT_PER_PERIOD} tokens to the bucket`)
 
-  if (bucket.value >= MAX_REQUESTS_PER_MINUTE) {
+  if (bucket.value >= MAX_REQUESTS_PER_PERIOD) {
     // reset the bucket
-    bucket.value = MAX_REQUESTS_PER_MINUTE
+    bucket.value = MAX_REQUESTS_PER_PERIOD
     bucket.lastUpdate = Date.now()
   }
   if (tokens > bucket.value) {
@@ -159,7 +159,7 @@ function loadBucket (key) {
 
       return {
         clientKey: key,
-        value: MAX_REQUESTS_PER_MINUTE,
+        value: MAX_REQUESTS_PER_PERIOD,
         lastUpdate: Date.now()
       }
     })

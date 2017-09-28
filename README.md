@@ -57,13 +57,13 @@ Once you have modified the function code so as not to use Environment Variables,
 
 ### Rate Limiting Algorithm
 
-The rate limiting algorithm used here is based on a token bucket (or "leaky bucket") as adapted from this [article on smyte.blog](https://medium.com/smyte/rate-limiter-df3408325846). In essence, each client has a bucket that starts full and is decremented one token on each request from that client. After a period of time (the refill period), the bucket is refilled with a given number of tokens. The bucket can never exceeded a maximum amount (of fullness).
+The rate limiting algorithm used here is based on a token bucket (or "leaky bucket") as adapted from this [article on smyte.blog](https://medium.com/smyte/rate-limiter-df3408325846). In essence, each client has a bucket that starts full and is decremented one token on each request from that client. After a period of time (the refill period), the bucket is refilled with a given number of tokens. The bucket can never exceed a maximum amount (of fullness).
 
 For example:
 
 > Each client is allowed 10 requests per minute, refilling with one token request per minute.
 
-This approach is quite flexible as we can configure: (1) maximum requests per period, (2) refill period, and (3) refill amount. Clients that exceed the desired rate limit will quickly find requests rejected while allowing properly behaved clients to continue as is. Misbehaved clients will build up tokens as they back off and can begin to behave properly without consequence once they do so.
+This approach is quite flexible as we can configure: (1) maximum requests per period, (2) refill period, and (3) refill amount per period. Clients that exceed the desired rate limit will quickly find requests rejected while allowing properly behaved clients to continue as is. Misbehaved clients will build up tokens as they back off and can begin to behave properly without consequence once they do so.
 
 ## Cleaning Up
 
