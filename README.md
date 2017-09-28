@@ -49,13 +49,13 @@ AWS resources are managed by the [Serverless Application Model](https://github.c
 
 In order to ensure all requests are passed to the origin, such that we can monitor using the origin-request event, be sure to set all TTLs (minimum, maximum, and desired) for the Behavior to 0. Ideally, this is only done on a small number of behaviors.
 
-## Lambda@Edge
+### Lambda@Edge
 
 As mentioned above, before these functions can be used with Lambda@Edge, you will need to remove use of Lambda Environment Variables by modifying the function code. Environment Variables are included here for easy testing (e.g. using SAM Local) before deploying to the Edge.
 
 Once you have modified the function code so as not to use Environment Variables, (1) create a new version of the Lambda function and (2) [configure CloudFront triggers](http://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-create-functions.html). Be sure to tie the appropriate function to the appropriate [CloudFront Event](http://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-cloudfront-trigger-events.html) type (i.e. Origin Request and Viewer Request).
 
-### Rate Limiting Algorithm
+## Rate Limiting Algorithm
 
 The rate limiting algorithm used here is based on a token bucket (or "leaky bucket") as adapted from this [article on smyte.blog](https://medium.com/smyte/rate-limiter-df3408325846). In essence, each client has a bucket that starts full and is decremented one token on each request from that client. After a period of time (the refill period), the bucket is refilled with a given number of tokens. The bucket can never exceed a maximum amount (of fullness).
 
