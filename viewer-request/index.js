@@ -2,7 +2,6 @@
 ///////// SAMPLE CODE ONLY /////////
 
 const util = require('util')
-const { STATUS_CODES } = require('http')
 
 // Environment Variables
 const SESSION_ID_COOKIE_NAME = process.env.SESSION_ID_COOKIE_NAME
@@ -16,7 +15,7 @@ const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
 function rateLimit () {
   return {
     status: '429',
-    statusDescription: STATUS_CODES['429']
+    statusDescription: 'Too Many Requests'
   }
 }
 
@@ -45,8 +44,8 @@ exports.handler = (event, context, callback) => {
         let m = cookie.value.match(cookieParser)
 
         if (m) {
-          request.headers['session-id'] = [{
-            key:   'session-id',
+          request.headers['rate-limit-session-id'] = [{
+            key:   'rate-limit-session-id',
             value: m[1]
           }]
         }
