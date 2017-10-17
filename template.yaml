@@ -6,15 +6,15 @@ Transform: "AWS::Serverless-2016-10-31"
 Description: "Sample of leveraging Lambda@Edge to block incoming requests"
 
 Parameters:
+  SessionIdCookieName:
+    Type: String
+    Default: 'SESSION_ID'
+    Description: Name of cookie containing unique session identifier
+
   OverLimitCookieName:
     Type: String
     Default: SESSION_OVER_LIMIT
     Description: Name of cookie to indicate client is over limit
-
-  OverLimitThreshold:
-    Type: String
-    Default: '10'
-    Description: Requests per second threshold before block is initiated
 
   MaximumRequestsPerPeriod:
     Type: String
@@ -45,6 +45,7 @@ Resources:
       Timeout: 1
       Environment:
         Variables:
+          SESSION_ID_COOKIE_NAME: !Ref SessionIdCookieName
           OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
 
   #
@@ -63,7 +64,6 @@ Resources:
           TABLE_REGION: !Sub "${AWS::Region}"
           TABLE_NAME: !Ref BlockingDDBTable
           OVER_LIMIT_COOKIE_NAME: !Ref OverLimitCookieName
-          SESSION_ID_COOKIE_NAME: !Ref SessionIdCookieName
           MAX_REQUESTS_PER_PERIOD: !Ref MaximumRequestsPerPeriod
           REFILL_PERIOD_IN_SECONDS: !Ref RefillPeriodInSeconds
           REFILL_AMOUNT_PER_PERIOD: !Ref RefillAmountByPeriod
