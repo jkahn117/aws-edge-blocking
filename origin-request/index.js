@@ -9,8 +9,6 @@
 const TABLE_REGION = (process.env.AWS_SAM_LOCAL) ? 'us-east-1' : process.env.TABLE_REGION
 /// Name of the DynamoDB table
 const TABLE_NAME = (process.env.AWS_SAM_LOCAL) ? 'edge-blocking' : process.env.TABLE_NAME
-/// Name of the cookie that identifies the session ID
-const SESSION_ID_COOKIE_NAME = process.env.SESSION_ID_COOKIE_NAME
 /// Name of the cookie that indicates a client is over rate limit
 const OVER_LIMIT_COOKIE_NAME = process.env.OVER_LIMIT_COOKIE_NAME
 /// Maximum number of requests allows per minute
@@ -50,7 +48,7 @@ const rateLimitResponse = {
 //---- FUNCTIONS ----//
 
 /**
- * Retrieves the session id (as identified by SESSION_ID_COOKIE_NAME)
+ * Retrieves the session id (as identified by rate-limit-session-id)
  * value from cookies in the request
  * @param  {[type]} request incoming http request
  * @return {[type]}         session id or null if not found
@@ -58,8 +56,8 @@ const rateLimitResponse = {
 function sessionIdFrom (request) {
   let sessionId = null
   
-  if (request.headers['session-id'] && request.headers['session-id'].length > 0) {
-    sessionId = request.headers['session-id'][0].value
+  if (request.headers['rate-limit-session-id'] && request.headers['rate-limit-session-id'].length > 0) {
+    sessionId = request.headers['rate-limit-session-id'][0].value
   }
 
   return sessionId
@@ -103,7 +101,8 @@ function _updateBucket (bucket) {
       clientKey: bucket.clientKey,
       value: bucket.value,
       lastUpdate: bucket.lastUpdate,
-      expiresAt: bucket.lastUpdate + (60 * 60 * 24 * 1000) // in 24 hours
+      // DynamoDB TTL operates on seconds, need to convert from milliseconds
+      expiresAt: Math.floor(bucket.lastUpdate / 1000) + (60 * 60 * 24) // in 24 hours
     }
   }
 
@@ -122,13 +121,14 @@ function reduce (bucket, tokens) {
   bucket.value += refillCount * REFILL_AMOUNT_PER_PERIOD
   bucket.lastUpdate += refillCount * REFILL_PERIOD_IN_SECONDS
 
-  console.log(`Adding ${refillCount * REFILL_AMOUNT_PER_PERIOD} tokens to the bucket`)
-
   if (bucket.value >= MAX_REQUESTS_PER_PERIOD) {
-    // reset the bucket
     bucket.value = MAX_REQUESTS_PER_PERIOD
     bucket.lastUpdate = Date.now()
+    console.log(`Resetting to ${MAX_REQUESTS_PER_PERIOD} tokens in the bucket`)
+  } else {
+    console.log(`Adding ${refillCount * REFILL_AMOUNT_PER_PERIOD} tokens to the bucket`)
   }
+
   if (tokens > bucket.value) {
     console.log('Not enough tokens remaining in bucket for this request!!')
     return _updateBucket(bucket).then(() => {
@@ -205,6 +205,9 @@ exports.handler = (event, context, callback) => {
     .catch((error) => {
       if (error instanceof OverLimitError) {
         callback(null, rateLimitResponse)
+      } else if (error.code === 'ProvisionedThroughputExceededException') {
+        // skip error if exceed DynamoDB throughput, do not penalize user
+        callback(null, request)
       } else {
         callback(error)
       }
